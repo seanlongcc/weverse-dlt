@@ -83,7 +83,7 @@ def extract_video_info(url, cookie_file):
 
 def format_date(date_str):
     """
-    Converts a date string like "Nov 9, 2024, 03:22" or "Feb 23, 01:38" into a formatted string "YYMMDD".
+    Converts a date string like "Nov 9, 2024, 03:22" or "Feb 23, 01:38" into a formatted string "YYMMDD_HHMM".
     If the year is missing, the current year is assumed.
     """
     try:
@@ -92,7 +92,7 @@ def format_date(date_str):
         current_year = datetime.now().year
         new_date_str = f"{date_str}, {current_year}"
         dt = datetime.strptime(new_date_str, "%b %d, %H:%M, %Y")
-    return dt.strftime("%y%m%d")
+    return dt.strftime("%y%m%d_%H%M")
 
 
 def process_video(video_url, cookie_file):
