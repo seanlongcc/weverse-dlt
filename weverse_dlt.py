@@ -42,7 +42,7 @@ def extract_video_info(url, cookie_file):
     options = Options()
     options.add_argument("--headless")
     options.add_argument(
-        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"
     )
     driver = webdriver.Chrome(options=options)
 
@@ -107,8 +107,8 @@ def process_video(video_url, cookie_file):
         "뚜미다🤓": "Sumin",
         "박뭐든가능시은🖤": "Sieun",
         "이사님🖤": "Isa",
-        "자윤이🐯🇰🇷": "Yoon",
-        "세으니": "Seeun"
+        "단발공주💕": "Yoon",
+        "세으니🌷": "Seeun"
     }
     group_member = artist_map.get(artist_text, artist_text[0] if artist_text else "UNK")
     formatted_date = format_date(date_text)
@@ -159,8 +159,8 @@ def process_video(video_url, cookie_file):
 
         # Execute the translation command.
         translation_command = (
-            f'conda run -n whisperx whisperx --language ko --task translate --model large-v3 '
-            f'--output_format srt --output_dir "{folder_name}" --chunk_size 10 "{output_path}"'
+            f'conda run -n whisperx_env whisperx --language ko --task translate --model large-v3 '
+            f'--output_format srt --compute_type float32 --output_dir "{folder_name}" --chunk_size 10 "{output_path}"'
         )
         print("Executing translation command:", translation_command)
         translation_result = subprocess.run(translation_command, shell=True)
