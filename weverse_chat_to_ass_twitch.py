@@ -37,6 +37,19 @@ def ass_escape(text: str) -> str:
     return text
 
 
+NAME_COLOR_ASS = "&H00909090&"
+MSG_COLOR_ASS = "&H00FFFFFF&"
+
+def render_chat_text(name: str, msg: str) -> str:
+    name_esc = ass_escape(name)
+    msg_esc = ass_escape(msg)
+    if name_esc:
+        if msg_esc:
+            return f"{{\\1c{NAME_COLOR_ASS}}}{name_esc}{{\\1c{MSG_COLOR_ASS}}}: {msg_esc}"
+        return f"{{\\1c{NAME_COLOR_ASS}}}{name_esc}{{\\1c{MSG_COLOR_ASS}}}"
+    return msg_esc
+
+
 def pick_fields(item: Dict[str, Any]) -> Tuple[Optional[int], str, str]:
     # Expected Weverse paginator objects:
     # messageTime (ms), profile.profileName, content
@@ -66,7 +79,8 @@ class ChatMsg:
     idx: int
     start: float
     expire: float
-    text: str
+    name: str
+    msg: str
     cur_start: Optional[float] = None
     cur_slot: Optional[int] = None
     cur_move_from: Optional[int] = None
@@ -122,19 +136,25 @@ class ChatMsg:
 
 
 def build_twitch_segments(
-    msgs_in: List[Tuple[float, str]],
+    msgs_in: List[Tuple[float, str, str]],
     hold: float,
     max_lines: int,
 ) -> List[ChatMsg]:
-    # msgs_in: list of (time_seconds, rendered_text)
+    # msgs_in: list of (time_seconds, name, message)
     # Event simulation:
     # - arrival pushes stack up; if full, top message is dropped
     # - expiry removes message and stack shifts down to fill
     messages: List[ChatMsg] = []
     events: List[Tuple[float, int, str]] = []  # (time, idx, kind 'exp'/'arr')
 
-    for i, (t, text) in enumerate(msgs_in):
-        cm = ChatMsg(idx=i, start=t, expire=t + hold, text=text)
+    for i, (t, name, msg) in enumerate(msgs_in):
+        cm = ChatMsg(
+            idx=i,
+            start=t,
+            expire=t + hold,
+            name=name,
+            msg=msg,
+        )
         messages.append(cm)
         events.append((t, i, "arr"))
         events.append((t + hold, i, "exp"))
@@ -209,6 +229,7 @@ def make_ass(
     resx: int,
     resy: int,
     margin_l: int,
+    margin_r: int,
     margin_v: int,
     font_name: str,
     font_size: int,
@@ -235,7 +256,7 @@ def make_ass(
         " Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow,"
         " Alignment, MarginL, MarginR, MarginV, Encoding\n"
         f"Style: Chat,{font_name},{font_size},&H00FFFFFF,&H000000FF,&H00000000,&H64000000,"
-        f"0,0,0,0,100,100,0,0,1,{outline},{shadow},1,{margin_l},0,{margin_v},1\n"
+        f"0,0,0,0,100,100,0,0,1,{outline},{shadow},1,{margin_l},{margin_r},{margin_v},1\n"
         "\n"
         "[Events]\n"
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
@@ -274,10 +295,10 @@ def make_ass(
                 tags.append(f"\\fad(0,{fade_ms})")
 
             tagblock = "{" + "".join(tags) + "}"
-            text = ass_escape(cm.text)
+            text = render_chat_text(cm.name, cm.msg)
 
             lines.append(
-                f"Dialogue: 0,{ass_time(start)},{ass_time(end)},Chat,,0,0,0,,{tagblock}{text}\n"
+                f"Dialogue: 0,{ass_time(start)},{ass_time(end)},Chat,,{margin_l},{margin_r},{margin_v},,{tagblock}{text}\n"
             )
 
     return "".join(lines)
@@ -288,16 +309,17 @@ def main() -> int:
     ap.add_argument("--chat", required=True, help="Input chat JSON (Weverse paginator output)")
     ap.add_argument("--ass", required=True, help="Output .ass path")
     ap.add_argument("--max-lines", type=int, default=6, help="Max lines visible (Twitch-style stack)")
-    ap.add_argument("--hold", type=float, default=6.0, help="Seconds each message lives (unless pushed out)")
+    ap.add_argument("--hold", type=float, default=10.0, help="Seconds each message lives (unless pushed out)")
     ap.add_argument("--shift", type=float, default=0.0, help="Seconds to animate stack movement (0 = no animation)")
     ap.add_argument("--fade-out", type=float, default=0.0, help="Fade-out seconds when a message disappears")
     ap.add_argument("--offset-seconds", type=float, default=0.0, help="Manual sync offset (+ delays chat, - advances chat)")
-    ap.add_argument("--resx", type=int, default=1920)
-    ap.add_argument("--resy", type=int, default=1080)
-    ap.add_argument("--margin-l", type=int, default=40)
+    ap.add_argument("--resx", type=int, default=1080)
+    ap.add_argument("--resy", type=int, default=1920)
+    ap.add_argument("--margin-l", type=int, default=10)
+    ap.add_argument("--margin-r", type=int, default=10)
     ap.add_argument("--margin-v", type=int, default=10)
-    ap.add_argument("--font-name", default="Noto Sans KR Bold")
-    ap.add_argument("--font-size", type=int, default=30)
+    ap.add_argument("--font-name", default="Nanum Gothic")
+    ap.add_argument("--font-size", type=int, default=36)
     ap.add_argument("--outline", type=int, default=2)
     ap.add_argument("--shadow", type=int, default=0)
     ap.add_argument("--line-gap", type=int, default=2)
@@ -325,16 +347,12 @@ def main() -> int:
         parsed = [p for p in parsed if p[0] >= 0]
         parsed.sort(key=lambda x: x[0])
         base = parsed[0][0]
-        msgs_in: List[Tuple[float, str]] = []
+        msgs_in: List[Tuple[float, str, str]] = []
         for ts, name, msg in parsed:
             t = (ts - base) / 1000.0 + args.offset_seconds
             if t < 0:
                 t = 0.0
-            if name:
-                rendered = f"{name}: {msg}"
-            else:
-                rendered = msg
-            msgs_in.append((t, rendered))
+            msgs_in.append((t, name, msg))
     else:
         # Fallback: no timestamps; space them out 1s apart
         msgs_in = []
@@ -342,8 +360,7 @@ def main() -> int:
             t = i * 1.0 + args.offset_seconds
             if t < 0:
                 t = 0.0
-            rendered = f"{name}: {msg}" if name else msg
-            msgs_in.append((t, rendered))
+            msgs_in.append((t, name, msg))
 
     chat_msgs = build_twitch_segments(
         msgs_in=msgs_in,
@@ -356,6 +373,7 @@ def main() -> int:
         resx=args.resx,
         resy=args.resy,
         margin_l=args.margin_l,
+        margin_r=args.margin_r,
         margin_v=args.margin_v,
         font_name=args.font_name,
         font_size=args.font_size,

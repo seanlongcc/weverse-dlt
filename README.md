@@ -90,9 +90,9 @@ Note: This workflow is outdated.
     python .\weverse_chat_dump.py --cookies .\cookie.txt --url "WEVERSE_LIVE_URL" --out .\weverse_chat.json --no-headless
     ```
 
-5. **Install Noto Sans KR**:  
+5. **Install Nanum Gothic**:  
     Download and install the font from:
-    <https://fonts.google.com/noto/specimen/Noto+Sans+KR>
+    <https://fonts.google.com/specimen/Nanum+Gothic>
 
 6. **Convert JSON to ASS**:
 
