@@ -42,8 +42,6 @@ def ass_escape(text: str) -> str:
 NAME_COLOR_ASS = "&H00B0B0B0&"
 MSG_COLOR_ASS = "&H00FFFFFF&"
 
-INFINITE_HOLD_TAIL_SECONDS = 24 * 60 * 60  # Keep sticky messages visible past the last chat timestamp.
-
 CHAR_WIDTH_FACTOR = 0.5
 TOKEN_RE = re.compile(r"\S+|\s+")
 
@@ -256,26 +254,19 @@ def build_twitch_segments(
     # - expiry removes message and stack shifts down to fill
     messages: List[ChatMsg] = []
     events: List[Tuple[float, int, str]] = []  # (time, idx, kind 'exp'/'arr')
-    infinite_hold = hold < 0
-    tail_end = None
-    if infinite_hold:
-        last_arrival = max((t for t, _, _, _ in msgs_in), default=0.0)
-        tail_end = last_arrival + INFINITE_HOLD_TAIL_SECONDS
 
     for i, (t, name, msg, lines) in enumerate(msgs_in):
-        expire = tail_end if infinite_hold else t + hold
         cm = ChatMsg(
             idx=i,
             start=t,
-            expire=expire,
+            expire=t + hold,
             name=name,
             msg=msg,
             lines=max(1, lines),
         )
         messages.append(cm)
         events.append((t, i, "arr"))
-        if not infinite_hold:
-            events.append((t + hold, i, "exp"))
+        events.append((t + hold, i, "exp"))
 
     # Sort: time, then expiries before arrivals at same time
     def ev_key(e: Tuple[float, int, str]) -> Tuple[float, int]:
@@ -339,7 +330,7 @@ def build_twitch_segments(
                 cm2.close_segment(t)
                 cm2.start_segment(t, new_slot, move_from_slot=old_slot)
 
-    # Close any remaining active segments (usually none, unless hold is negative).
+    # Close any remaining active segments (usually none, since every message has an expiry event)
     for midx in list(active):
         messages[midx].end(messages[midx].expire)
 
