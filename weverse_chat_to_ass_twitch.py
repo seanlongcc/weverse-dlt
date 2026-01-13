@@ -37,7 +37,7 @@ def ass_escape(text: str) -> str:
     return text
 
 
-NAME_COLOR_ASS = "&H00D0D0D0&"
+NAME_COLOR_ASS = "&H00B0B0B0&"
 MSG_COLOR_ASS = "&H00FFFFFF&"
 
 def render_chat_text(name: str, msg: str) -> str:
