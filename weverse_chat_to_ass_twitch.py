@@ -3,6 +3,8 @@
 
 import argparse
 import json
+import re
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -39,6 +41,113 @@ def ass_escape(text: str) -> str:
 
 NAME_COLOR_ASS = "&H00B0B0B0&"
 MSG_COLOR_ASS = "&H00FFFFFF&"
+
+INFINITE_HOLD_TAIL_SECONDS = 24 * 60 * 60  # Keep sticky messages visible past the last chat timestamp.
+
+CHAR_WIDTH_FACTOR = 0.5
+TOKEN_RE = re.compile(r"\S+|\s+")
+
+
+def text_cell_width(text: str) -> int:
+    width = 0
+    for ch in text:
+        east = unicodedata.east_asian_width(ch)
+        width += 2 if east in ("F", "W") else 1
+    return width
+
+
+def estimate_max_cells(
+    resx: int,
+    margin_l: int,
+    margin_r: int,
+    font_size: int,
+    outline: int,
+) -> int:
+    usable_px = max(1, resx - margin_l - margin_r - outline * 2)
+    cell_px = max(1.0, font_size * CHAR_WIDTH_FACTOR)
+    return max(1, int(usable_px / cell_px))
+
+
+def wrap_paragraph_cells(
+    paragraph: str,
+    max_cells: int,
+    first_line_cells: Optional[int] = None,
+) -> List[str]:
+    if paragraph == "":
+        return [""]
+
+    limit = max(1, first_line_cells if first_line_cells is not None else max_cells)
+    lines: List[str] = []
+    cur = ""
+    cur_w = 0
+
+    for tok in TOKEN_RE.findall(paragraph):
+        if tok.isspace():
+            if not cur:
+                continue
+            tok_w = text_cell_width(tok)
+            if cur_w + tok_w > limit:
+                lines.append(cur.rstrip())
+                cur = ""
+                cur_w = 0
+                limit = max_cells
+                continue
+            cur += tok
+            cur_w += tok_w
+            continue
+
+        tok_w = text_cell_width(tok)
+        if tok_w > limit:
+            for ch in tok:
+                ch_w = text_cell_width(ch)
+                if cur and cur_w + ch_w > limit:
+                    lines.append(cur.rstrip())
+                    cur = ""
+                    cur_w = 0
+                    limit = max_cells
+                cur += ch
+                cur_w += ch_w
+            continue
+
+        if cur and cur_w + tok_w > limit:
+            lines.append(cur.rstrip())
+            cur = tok
+            cur_w = tok_w
+            limit = max_cells
+        else:
+            cur += tok
+            cur_w += tok_w
+
+    if cur or paragraph == "":
+        lines.append(cur.rstrip())
+    return lines
+
+
+def wrap_message_text(
+    name: str,
+    msg: str,
+    max_cells: int,
+) -> Tuple[str, int]:
+    if not msg:
+        return msg, 1
+
+    prefix = f"{name}: " if name else ""
+    prefix_cells = text_cell_width(prefix) if prefix else 0
+    first_line_cells = max(1, max_cells - prefix_cells) if prefix else max_cells
+
+    lines: List[str] = []
+    parts = msg.split("\n")
+    for i, paragraph in enumerate(parts):
+        if i == 0:
+            lines.extend(wrap_paragraph_cells(paragraph, max_cells, first_line_cells))
+        else:
+            lines.extend(wrap_paragraph_cells(paragraph, max_cells))
+
+    if not lines:
+        lines = [""]
+
+    return "\n".join(lines), max(1, len(lines))
+
 
 def render_chat_text(name: str, msg: str) -> str:
     name_esc = ass_escape(name)
@@ -81,6 +190,7 @@ class ChatMsg:
     expire: float
     name: str
     msg: str
+    lines: int = 1
     cur_start: Optional[float] = None
     cur_slot: Optional[int] = None
     cur_move_from: Optional[int] = None
@@ -136,28 +246,36 @@ class ChatMsg:
 
 
 def build_twitch_segments(
-    msgs_in: List[Tuple[float, str, str]],
+    msgs_in: List[Tuple[float, str, str, int]],
     hold: float,
     max_lines: int,
 ) -> List[ChatMsg]:
-    # msgs_in: list of (time_seconds, name, message)
+    # msgs_in: list of (time_seconds, name, message, line_count)
     # Event simulation:
     # - arrival pushes stack up; if full, top message is dropped
     # - expiry removes message and stack shifts down to fill
     messages: List[ChatMsg] = []
     events: List[Tuple[float, int, str]] = []  # (time, idx, kind 'exp'/'arr')
+    infinite_hold = hold < 0
+    tail_end = None
+    if infinite_hold:
+        last_arrival = max((t for t, _, _, _ in msgs_in), default=0.0)
+        tail_end = last_arrival + INFINITE_HOLD_TAIL_SECONDS
 
-    for i, (t, name, msg) in enumerate(msgs_in):
+    for i, (t, name, msg, lines) in enumerate(msgs_in):
+        expire = tail_end if infinite_hold else t + hold
         cm = ChatMsg(
             idx=i,
             start=t,
-            expire=t + hold,
+            expire=expire,
             name=name,
             msg=msg,
+            lines=max(1, lines),
         )
         messages.append(cm)
         events.append((t, i, "arr"))
-        events.append((t + hold, i, "exp"))
+        if not infinite_hold:
+            events.append((t + hold, i, "exp"))
 
     # Sort: time, then expiries before arrivals at same time
     def ev_key(e: Tuple[float, int, str]) -> Tuple[float, int]:
@@ -167,6 +285,7 @@ def build_twitch_segments(
     events.sort(key=ev_key)
 
     active: List[int] = []  # message indices, bottom-to-top (slot 0 is bottom)
+    occupied_lines = 0
 
     for t, idx, kind in events:
         if kind == "arr":
@@ -175,23 +294,29 @@ def build_twitch_segments(
             if cm_new.expire <= t:
                 continue
 
-            # If stack full, drop the topmost first
-            if len(active) >= max_lines:
+            height_new = cm_new.lines
+
+            # If stack full, drop top messages until there's space
+            while active and occupied_lines + height_new > max_lines:
                 top_idx = active[-1]
                 top = messages[top_idx]
                 top.end(t)
-                # stop tracking it
+                occupied_lines -= top.lines
                 active.pop()
 
-            # Shift everyone up by 1 slot (close & restart)
-            for slot, midx in enumerate(active):
+            # Shift everyone up by the new message height (close & restart)
+            for midx in active:
                 cm = messages[midx]
                 cm.close_segment(t)
-                cm.start_segment(t, slot + 1, move_from_slot=slot)
+                if cm.cur_slot is None:
+                    continue
+                old_slot = cm.cur_slot
+                cm.start_segment(t, old_slot + height_new, move_from_slot=old_slot)
 
             # Insert new at bottom
             cm_new.start_segment(t, 0, move_from_slot=None)
             active.insert(0, idx)
+            occupied_lines += height_new
 
         else:  # expiry
             if idx not in active:
@@ -199,19 +324,22 @@ def build_twitch_segments(
             # Remove expired message
             pos = active.index(idx)
             cm = messages[idx]
+            height_exp = cm.lines
             cm.end(t)
             active.pop(pos)
+            occupied_lines -= height_exp
 
             # Shift down messages above it to fill gap
-            for j in range(pos, len(active)):
-                midx = active[j]
+            for midx in active[pos:]:
                 cm2 = messages[midx]
-                old_slot = j + 1
-                new_slot = j
+                if cm2.cur_slot is None:
+                    continue
+                old_slot = cm2.cur_slot
+                new_slot = old_slot - height_exp
                 cm2.close_segment(t)
                 cm2.start_segment(t, new_slot, move_from_slot=old_slot)
 
-    # Close any remaining active segments (usually none, since every message has an expiry event)
+    # Close any remaining active segments (usually none, unless hold is negative).
     for midx in list(active):
         messages[midx].end(messages[midx].expire)
 
@@ -248,7 +376,7 @@ def make_ass(
         "ScriptType: v4.00+\n"
         f"PlayResX: {resx}\n"
         f"PlayResY: {resy}\n"
-        "WrapStyle: 2\n"
+        "WrapStyle: 0\n"
         "ScaledBorderAndShadow: yes\n"
         "\n"
         "[V4+ Styles]\n"
@@ -309,7 +437,7 @@ def main() -> int:
     ap.add_argument("--chat", required=True, help="Input chat JSON (Weverse paginator output)")
     ap.add_argument("--ass", required=True, help="Output .ass path")
     ap.add_argument("--max-lines", type=int, default=6, help="Max lines visible (Twitch-style stack)")
-    ap.add_argument("--hold", type=float, default=10.0, help="Seconds each message lives (unless pushed out)")
+    ap.add_argument("--hold", type=float, default=3600.0, help="Seconds each message lives (unless pushed out)")
     ap.add_argument("--shift", type=float, default=0.0, help="Seconds to animate stack movement (0 = no animation)")
     ap.add_argument("--fade-out", type=float, default=0.0, help="Fade-out seconds when a message disappears")
     ap.add_argument("--offset-seconds", type=float, default=0.0, help="Manual sync offset (+ delays chat, - advances chat)")
@@ -325,6 +453,14 @@ def main() -> int:
     ap.add_argument("--line-gap", type=int, default=2)
 
     args = ap.parse_args()
+
+    max_cells = estimate_max_cells(
+        resx=args.resx,
+        margin_l=args.margin_l,
+        margin_r=args.margin_r,
+        font_size=args.font_size,
+        outline=args.outline,
+    )
 
     with open(args.chat, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -347,12 +483,13 @@ def main() -> int:
         parsed = [p for p in parsed if p[0] >= 0]
         parsed.sort(key=lambda x: x[0])
         base = parsed[0][0]
-        msgs_in: List[Tuple[float, str, str]] = []
+        msgs_in: List[Tuple[float, str, str, int]] = []
         for ts, name, msg in parsed:
             t = (ts - base) / 1000.0 + args.offset_seconds
             if t < 0:
                 t = 0.0
-            msgs_in.append((t, name, msg))
+            wrapped_msg, line_count = wrap_message_text(name, msg, max_cells)
+            msgs_in.append((t, name, wrapped_msg, line_count))
     else:
         # Fallback: no timestamps; space them out 1s apart
         msgs_in = []
@@ -360,7 +497,8 @@ def main() -> int:
             t = i * 1.0 + args.offset_seconds
             if t < 0:
                 t = 0.0
-            msgs_in.append((t, name, msg))
+            wrapped_msg, line_count = wrap_message_text(name, msg, max_cells)
+            msgs_in.append((t, name, wrapped_msg, line_count))
 
     chat_msgs = build_twitch_segments(
         msgs_in=msgs_in,
