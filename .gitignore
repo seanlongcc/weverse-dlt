@@ -1,6 +1,9 @@
 cookie.txt
 video_links.txt
 tempCodeRunnerFile.py
+*.json
+*.mp4
+*.ass
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

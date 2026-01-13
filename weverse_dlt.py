@@ -103,11 +103,11 @@ def process_video(video_url, cookie_file):
     # Map artist names (or emojis) to desired shorthand.
     artist_map = {
         "STAYC": "STAYC",
-        "🐶장티쥬🐶": "J",
-        "뚜미다🤓": "Sumin",
+        "장재이😝": "J",
+        "청숨": "Sumin",
         "박뭐든가능시은🖤": "Sieun",
         "이사님🖤": "Isa",
-        "단발공주💕": "Yoon",
+        "자유니💕": "Yoon",
         "세으니🌷": "Seeun"
     }
     group_member = artist_map.get(artist_text, artist_text[0] if artist_text else "UNK")
@@ -160,7 +160,7 @@ def process_video(video_url, cookie_file):
         # Execute the translation command.
         translation_command = (
             f'conda run -n whisperx_env whisperx --language ko --task translate --model large-v3 '
-            f'--output_format srt --compute_type float32 --output_dir "{folder_name}" --chunk_size 10 "{output_path}"'
+            f'--output_format srt --compute_type float32 --output_dir "{folder_name}" --chunk_size 5 "{output_path}"'
         )
         print("Executing translation command:", translation_command)
         translation_result = subprocess.run(translation_command, shell=True)

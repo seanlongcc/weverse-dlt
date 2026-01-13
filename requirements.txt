@@ -1,0 +1,5 @@
+selenium-wire
+selenium
+brotli
+zstandard
+blinker==1.6.2
