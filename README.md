@@ -103,5 +103,5 @@ Note: This workflow is outdated.
 7. **Embed Subtitles**:
 
     ```bash
-    ffmpeg -i "FILEPATH_HERE" ` -vf "subtitles=weverse_twitch_chat.ass:fontsdir='C\:/Users/YOUR_DIR/AppData/Local/Microsoft/Windows/Fonts'" ` -c:a copy output.mp4
+    ffmpeg -i "DOWNLOADED_VIDEO_FILEPATH_HERE" ` -vf "subtitles=weverse_twitch_chat.ass:fontsdir='C\:/Users/YOUR_DIR/AppData/Local/Microsoft/Windows/Fonts'" ` -c:a copy output.mp4
     ```

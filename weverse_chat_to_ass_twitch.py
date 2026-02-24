@@ -39,10 +39,10 @@ def ass_escape(text: str) -> str:
     return text
 
 
-NAME_COLOR_ASS = "&H00B0B0B0&"
+NAME_COLOR_ASS = "&H00909090&"
 MSG_COLOR_ASS = "&H00FFFFFF&"
 
-CHAR_WIDTH_FACTOR = 0.5
+CHAR_WIDTH_FACTOR = 0.55
 TOKEN_RE = re.compile(r"\S+|\s+")
 
 
@@ -438,7 +438,7 @@ def main() -> int:
     ap.add_argument("--margin-r", type=int, default=10)
     ap.add_argument("--margin-v", type=int, default=10)
     ap.add_argument("--font-name", default="Nanum Gothic")
-    ap.add_argument("--font-size", type=int, default=36)
+    ap.add_argument("--font-size", type=int, default=44)
     ap.add_argument("--outline", type=int, default=2)
     ap.add_argument("--shadow", type=int, default=0)
     ap.add_argument("--line-gap", type=int, default=2)
