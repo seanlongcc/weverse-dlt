@@ -190,7 +190,7 @@ def process_video(video_url, cookie_file):
 
 def main():
     if len(sys.argv) != 3:
-        print("Usage: python download_and_translate.py <cookie_file> <links_file>")
+        print("Usage: python scripts/weverse_dlt.py <cookie_file> <links_file>")
         sys.exit(1)
 
     cookie_file = sys.argv[1]

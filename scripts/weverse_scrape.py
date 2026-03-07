@@ -100,7 +100,7 @@ def save_links_to_file(links, output_file="video_links.txt"):
 
 def main():
     if len(sys.argv) != 3:
-        print("Usage: python weverse_video_links.py <cookie_file> <target_url>")
+        print("Usage: python scripts/weverse_scrape.py <cookie_file> <target_url>")
         sys.exit(1)
 
     cookie_file = sys.argv[1]

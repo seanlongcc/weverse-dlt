@@ -7,6 +7,7 @@ This project is an under-development tool for scraping, downloading, and transla
 - **weverse_scrape**: Scrapes an entire group's Weverse Live catalog and outputs a `video_links.txt` file containing all video links
 - **weverse_dlt**: Downloads and translates videos from `video_links.txt`
 - **weverse_chat_dump**: Dumps Weverse live/VOD chat to JSON for later subtitle rendering
+- **weverse_chat_ui**: PySide6 desktop UI that downloads a VOD, dumps replay chat, generates a Twitch-style ASS overlay, and burns it into a final MP4 when `ffmpeg` is available
 
 ## Requirements
 
@@ -37,7 +38,7 @@ Note: This workflow is outdated.
     Run the scraper to generate `video_links.txt`:
 
     ```bash
-    python weverse_video_links.py cookie.txt https://weverse.io/stayc/live
+    python scripts/weverse_scrape.py cookie.txt https://weverse.io/stayc/live
     ```
 
     Replace `https://weverse.io/stayc/live` with your target URL if needed.
@@ -46,7 +47,7 @@ Note: This workflow is outdated.
     Run the downloader/translator using your cookie file and the generated links file:
 
     ```bash
-    python weverse_dlt.py cookie.txt video_links.txt
+    python scripts/weverse_dlt.py cookie.txt video_links.txt
     ```
 
 ## Video Subtitle Translation Workflow
@@ -69,12 +70,12 @@ Note: This workflow is outdated.
     document.cookie
     ```
 
-    and save the output to a file named `cookie.txt` in the repository root.
+    and keep the raw output ready to paste into the UI.
 
 2. **Create and activate a Python 3.11 venv**:
 
     ```bash
-    python -m venv .venv
+    py -3.11 -m venv .venv
     .\.venv\Scripts\activate
     ```
 
@@ -84,24 +85,26 @@ Note: This workflow is outdated.
     pip install -r requirements.txt
     ```
 
-4. **Dump chat to JSON**:
+4. **Install `ffmpeg` and Nanum Gothic**:
+
+    - Add `ffmpeg` to your `PATH` if you want the final burned-in video file.
+    - Download and install Nanum Gothic from:
+      <https://fonts.google.com/specimen/Nanum+Gothic>
+
+5. **Launch the chat workflow UI**:
 
     ```bash
-    python .\weverse_chat_dump.py --cookies .\cookie.txt --url "WEVERSE_LIVE_URL" --out .\weverse_chat.json --no-headless
+    python .\weverse_chat_ui.py
     ```
 
-5. **Install Nanum Gothic**:  
-    Download and install the font from:
-    <https://fonts.google.com/specimen/Nanum+Gothic>
+6. **Paste the cookie and URL, then run the workflow**:
 
-6. **Convert JSON to ASS**:
-
-    ```bash
-    python .\weverse_chat_to_ass_twitch.py --chat "weverse_chat.json" --ass weverse_twitch_chat.ass
-    ```
-
-7. **Embed Subtitles**:
-
-    ```bash
-    ffmpeg -i "DOWNLOADED_VIDEO_FILEPATH_HERE" ` -vf "subtitles=weverse_twitch_chat.ass:fontsdir='C\:/Users/YOUR_DIR/AppData/Local/Microsoft/Windows/Fonts'" ` -c:a copy output.mp4
-    ```
+    - Paste the raw `document.cookie` output into the cookie field.
+    - Paste the Weverse live/VOD URL into the URL field.
+    - Click **Run Workflow**.
+    - The app will:
+      - create a fresh output folder under `output/`
+      - download the video with `yt-dlp`
+      - open Chrome and dump replay chat to `weverse_chat.json`
+      - convert the dump to `weverse_twitch_chat.ass`
+      - render a burned-in `*_chat_burned.mp4` when `ffmpeg` is available

@@ -4,9 +4,17 @@
 import argparse
 import json
 import re
+import sys
 import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
+
+
+def configure_stdio() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8", errors="backslashreplace")
 
 
 def ass_time(t: float) -> str:
@@ -424,6 +432,7 @@ def make_ass(
 
 
 def main() -> int:
+    configure_stdio()
     ap = argparse.ArgumentParser()
     ap.add_argument("--chat", required=True, help="Input chat JSON (Weverse paginator output)")
     ap.add_argument("--ass", required=True, help="Output .ass path")

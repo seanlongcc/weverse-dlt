@@ -2,9 +2,22 @@ import argparse
 import json
 import time
 import gzip
+import sys
 
 from seleniumwire import webdriver  # pip install selenium-wire
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.chrome.options import Options
+
+
+def configure_stdio() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8", errors="backslashreplace")
+
+
+def log(message: str) -> None:
+    print(str(message), flush=True)
 
 
 # ---------- cookie loader ----------
@@ -285,10 +298,10 @@ const done = arguments[0];
 
   collect();
 
-  const maxRounds = 600;
+  const maxRounds = 80;
   for (let i = 0; i < maxRounds; i++) {
     scroller.scrollTop = scroller.scrollHeight;
-    await sleep(500);
+    await sleep(250);
 
     const rowCount = collect();
     const seenSize = seen.size;
@@ -299,7 +312,7 @@ const done = arguments[0];
     lastRowCount = rowCount;
     lastSeenSize = seenSize;
 
-    if (stableRounds >= 8) break;
+    if (stableRounds >= 6) break;
   }
 
   done({
@@ -337,6 +350,7 @@ def dump_chat(cookie_file: str, target_url: str, out_file: str, headless: bool =
 
     sw_opts = {"verify_ssl": False, "disable_encoding": False}
     driver = webdriver.Chrome(options=options, seleniumwire_options=sw_opts)
+    driver.set_script_timeout(90)
 
     try:
         driver.get("https://weverse.io/")
@@ -347,7 +361,7 @@ def dump_chat(cookie_file: str, target_url: str, out_file: str, headless: bool =
         driver.get(target_url)
 
         # Wait for first chat response
-        print("Waiting for first chat API response...")
+        log("Waiting for first chat API response...")
         t0 = time.time()
         while time.time() - t0 < 30:
             if any(is_chat_messages_request(r) for r in driver.requests):
@@ -363,7 +377,7 @@ def dump_chat(cookie_file: str, target_url: str, out_file: str, headless: bool =
         try:
             driver.execute_script(DISABLE_AUTOPLAY_JS)
         except Exception as e:
-            print(f"Autoplay toggle script error: {e}")
+            log(f"Autoplay toggle script error: {e}")
 
         seen_req_urls = set()
         seen_msgs = set()
@@ -372,7 +386,7 @@ def dump_chat(cookie_file: str, target_url: str, out_file: str, headless: bool =
         idle_rounds = 0
         max_idle_rounds = 5  # allow more attempts
 
-        print("Scrolling to load older chat pages...")
+        log("Scrolling to load older chat pages...")
         while True:
             # 1) harvest any new chat pages we captured since last loop
             new_pages = 0
@@ -386,7 +400,7 @@ def dump_chat(cookie_file: str, target_url: str, out_file: str, headless: bool =
                 try:
                     payload = parse_chat_payload(req)
                 except Exception as e:
-                    print(f"Failed to parse one response: {e}")
+                    log(f"Failed to parse one response: {e}")
                     continue
 
                 data = payload.get("data") or []
@@ -408,7 +422,7 @@ def dump_chat(cookie_file: str, target_url: str, out_file: str, headless: bool =
                 idle_rounds = 0
 
             chat_req_count = sum(1 for r in driver.requests if is_chat_messages_request(r))
-            print(f"pages+{new_pages} total_msgs={len(all_msgs)} chat_req_count={chat_req_count} idle={idle_rounds}")
+            log(f"pages+{new_pages} total_msgs={len(all_msgs)} chat_req_count={chat_req_count} idle={idle_rounds}")
 
             if idle_rounds >= max_idle_rounds:
                 break
@@ -418,9 +432,11 @@ def dump_chat(cookie_file: str, target_url: str, out_file: str, headless: bool =
             try:
                 result = driver.execute_async_script(SCROLL_PREVIOUS_CHAT_JS)
                 if isinstance(result, dict) and not result.get("ok", True):
-                    print(f"Scroll script error: {result.get('error')}")
+                    log(f"Scroll script error: {result.get('error')}")
+            except TimeoutException:
+                log("Scroll script timed out waiting for DOM stability; continuing with any pages already captured.")
             except Exception as e:
-                print(f"Scroll script error: {e}")
+                log(f"Scroll script error: {e}")
 
             # wait for a new network call
             got_new = wait_for_new_chat_request(driver, prev_count, timeout_sec=6.0)
@@ -434,7 +450,7 @@ def dump_chat(cookie_file: str, target_url: str, out_file: str, headless: bool =
         with open(out_file, "w", encoding="utf-8") as f:
             json.dump(all_msgs, f, ensure_ascii=False, indent=2)
 
-        print(f"Saved {len(all_msgs)} messages to {out_file}")
+        log(f"Saved {len(all_msgs)} messages to {out_file}")
 
     finally:
         driver.quit()
@@ -462,6 +478,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    configure_stdio()
     args = parse_args()
     dump_chat(args.cookie_file, args.target_url, args.out_file, headless=args.headless)
     return 0
