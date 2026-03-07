@@ -832,7 +832,6 @@ class WeverseChatStudio(QMainWindow):
         self.start_button = QPushButton("Run", setup_card)
         self.start_button.clicked.connect(self._start_workflow)
         self.clear_button = QPushButton("Clear", setup_card)
-        self.clear_button.setProperty("variant", "secondary")
         self.clear_button.clicked.connect(self._clear_inputs)
         self.stop_button = QPushButton("Stop", setup_card)
         self.stop_button.setObjectName("stopButton")
