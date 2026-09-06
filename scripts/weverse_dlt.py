@@ -4,6 +4,11 @@ import re
 import subprocess
 from datetime import datetime
 
+try:
+    from scripts.weverse_output import write_title_file
+except ModuleNotFoundError:
+    from weverse_output import write_title_file
+
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -182,6 +187,8 @@ def process_video(video_url, cookie_file):
             with open(title_file_path, "w", encoding="utf-8") as tf:
                 tf.write(video_title)
             print(f"Title written to: {title_file_path}")
+            plain_title_path = write_title_file(os.path.abspath(folder_name), video_title)
+            print(f"Plain title written to: {plain_title_path}")
         except Exception as e:
             print(f"Failed to write title file: {e}")
     else:
