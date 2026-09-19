@@ -77,6 +77,7 @@ Note: This workflow is outdated.
     - Add `ffmpeg` to `PATH` for the final video with chat burned in. Without it, the source video, JSON, and ASS files are still produced.
     - `ffprobe`, normally included with ffmpeg, supplies video dimensions.
     - Install [Nanum Gothic](https://fonts.google.com/specimen/Nanum+Gothic) for the intended overlay font.
+    - Color chat burn-in requires PySide6 6.9 or later (included in `requirements.txt`). It uses native color emoji fonts: Segoe UI Emoji on Windows, Apple Color Emoji on macOS, or Noto Color Emoji on Linux. Install Noto Color Emoji on Linux if emoji are missing. Available emoji designs and sequences depend on the installed font; for example, Segoe UI Emoji displays many flags as country letters.
 
 3. **Launch Weverse Live Processor**:
 
@@ -104,6 +105,7 @@ Note: This workflow is outdated.
     - **Import .txt** accepts a UTF-8 links file, including files created by `weverse_scrape.py`.
     - Duplicate replay links are skipped, including copies with different share query parameters. Invalid input is rejected as a whole so it can be corrected before adding.
     - Click **Start queue**. Replays run sequentially. Each gets its own folder under `output/`, containing `title.txt`, the source video, `weverse_chat.json`, `weverse_twitch_chat.ass`, and `*_chat_burned.mp4` when rendering succeeds.
+    - Burned chat has stable colors for viewer names, white message text, and native color emoji. Text is measured before wrapping, keeping joined emoji and skin tones together. The MP4 uses transparent snapshots rendered from the chat JSON; temporary snapshots are removed after rendering, errors, or cancellation. The separate ASS overlay keeps colored names, but emoji rendering in ASS depends on the subtitle player and may remain monochrome.
     - Inspect each row's status, select it to see output stages, and click **Open selected folder** or the row's **Open folder** cell. Partial files remain accessible after errors or cancellation.
     - A failed replay does not block later links. **Stop** cancels active work; links that have not started stay queued. **Start queue** runs those remaining links. **Retry unfinished** also queues failed, stopped, and warning items for a fresh run in a new folder; it does not resume a partial download in place.
     - **Remove selected** removes a row. **Clear all** clears the queue, input links, and session. These actions leave downloaded files on disk. Queue entries and credentials are not restored after restarting the app.

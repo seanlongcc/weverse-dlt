@@ -3,5 +3,5 @@ selenium
 brotli
 zstandard
 blinker==1.6.2
-PySide6
+PySide6>=6.9
 yt-dlp

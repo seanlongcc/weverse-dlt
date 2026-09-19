@@ -2,6 +2,7 @@
 # weverse_chat_to_ass_twitch.py
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -47,8 +48,19 @@ def ass_escape(text: str) -> str:
     return text
 
 
-NAME_COLOR_ASS = "&H00909090&"
+NAME_COLORS = ("#7dd3fc", "#c4b5fd", "#f9a8d4", "#86efac", "#fcd34d", "#fdba74", "#67e8f9")
 MSG_COLOR_ASS = "&H00FFFFFF&"
+
+
+def name_color(name: str) -> str:
+    """Keep a viewer's color stable across runs and both overlay formats."""
+    digest = hashlib.sha256(name.encode("utf-8")).digest()
+    return NAME_COLORS[int.from_bytes(digest[:4], "big") % len(NAME_COLORS)]
+
+
+def name_color_ass(name: str) -> str:
+    rgb = name_color(name)[1:]
+    return f"&H00{rgb[4:6]}{rgb[2:4]}{rgb[0:2]}&"
 
 CHAR_WIDTH_FACTOR = 0.55
 TOKEN_RE = re.compile(r"\S+|\s+")
@@ -160,15 +172,16 @@ def render_chat_text(name: str, msg: str) -> str:
     msg_esc = ass_escape(msg)
     if name_esc:
         if msg_esc:
-            return f"{{\\1c{NAME_COLOR_ASS}}}{name_esc}{{\\1c{MSG_COLOR_ASS}}}: {msg_esc}"
-        return f"{{\\1c{NAME_COLOR_ASS}}}{name_esc}{{\\1c{MSG_COLOR_ASS}}}"
+            return f"{{\\1c{name_color_ass(name)}}}{name_esc}{{\\1c{MSG_COLOR_ASS}}}: {msg_esc}"
+        return f"{{\\1c{name_color_ass(name)}}}{name_esc}{{\\1c{MSG_COLOR_ASS}}}"
     return msg_esc
 
 
 def pick_fields(item: Dict[str, Any]) -> Tuple[Optional[int], str, str]:
     # Expected Weverse paginator objects:
     # messageTime (ms), profile.profileName, content
-    ts = item.get("messageTime") or item.get("createTime") or item.get("updateTime")
+    ts = next((item[key] for key in ("messageTime", "createTime", "updateTime")
+               if item.get(key) is not None), None)
     name = ""
     prof = item.get("profile") or {}
     if isinstance(prof, dict):
@@ -178,6 +191,28 @@ def pick_fields(item: Dict[str, Any]) -> Tuple[Optional[int], str, str]:
 
     msg = (item.get("content") or item.get("message") or "").strip()
     return (int(ts) if ts is not None else None), name, msg
+
+
+def load_chat_messages(path: str, offset_seconds: float = 0.0) -> List[Tuple[float, str, str]]:
+    """Normalize replay timestamps once for the ASS and color renderers."""
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, list):
+        raise ValueError("Chat JSON must be a list of messages.")
+    parsed = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        ts, name, msg = pick_fields(item)
+        if name or msg:
+            parsed.append((ts if ts is not None else -1, name, msg))
+    if any(ts >= 0 for ts, _, _ in parsed):
+        parsed = sorted((p for p in parsed if p[0] >= 0), key=lambda p: p[0])
+        base = parsed[0][0]
+        return [(max(0.0, (ts - base) / 1000.0 + offset_seconds), name, msg)
+                for ts, name, msg in parsed]
+    return [(max(0.0, float(i) + offset_seconds), name, msg)
+            for i, (_, name, msg) in enumerate(parsed)]
 
 
 @dataclass
@@ -462,43 +497,10 @@ def main() -> int:
         outline=args.outline,
     )
 
-    with open(args.chat, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    if not isinstance(data, list):
-        raise SystemExit("Chat JSON must be a list of messages.")
-
-    parsed: List[Tuple[int, str, str]] = []
-    for item in data:
-        if not isinstance(item, dict):
-            continue
-        ts, name, msg = pick_fields(item)
-        if not msg and not name:
-            continue
-        parsed.append((ts if ts is not None else -1, name, msg))
-
-    # If we have timestamps, sort and zero them
-    have_ts = any(ts >= 0 for ts, _, _ in parsed)
-    if have_ts:
-        parsed = [p for p in parsed if p[0] >= 0]
-        parsed.sort(key=lambda x: x[0])
-        base = parsed[0][0]
-        msgs_in: List[Tuple[float, str, str, int]] = []
-        for ts, name, msg in parsed:
-            t = (ts - base) / 1000.0 + args.offset_seconds
-            if t < 0:
-                t = 0.0
-            wrapped_msg, line_count = wrap_message_text(name, msg, max_cells)
-            msgs_in.append((t, name, wrapped_msg, line_count))
-    else:
-        # Fallback: no timestamps; space them out 1s apart
-        msgs_in = []
-        for i, (_, name, msg) in enumerate(parsed):
-            t = i * 1.0 + args.offset_seconds
-            if t < 0:
-                t = 0.0
-            wrapped_msg, line_count = wrap_message_text(name, msg, max_cells)
-            msgs_in.append((t, name, wrapped_msg, line_count))
+    msgs_in: List[Tuple[float, str, str, int]] = []
+    for t, name, msg in load_chat_messages(args.chat, args.offset_seconds):
+        wrapped_msg, line_count = wrap_message_text(name, msg, max_cells)
+        msgs_in.append((t, name, wrapped_msg, line_count))
 
     chat_msgs = build_twitch_segments(
         msgs_in=msgs_in,

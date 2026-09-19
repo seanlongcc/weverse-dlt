@@ -94,7 +94,8 @@ def test_real_subprocess_can_be_cancelled_and_reaped():
 
 
 @pytest.mark.skipif(not shutil.which('ffmpeg'), reason='ffmpeg not installed')
-def test_synthetic_unicode_chat_to_ass_and_real_burn_in(tmp_path):
+@pytest.mark.parametrize('color_chat', [False, True])
+def test_synthetic_unicode_chat_to_ass_and_real_burn_in(tmp_path, color_chat):
     folder = tmp_path / 'replay [sample], space'
     folder.mkdir()
     video = folder / 'sample.mp4'
@@ -111,6 +112,12 @@ def test_synthetic_unicode_chat_to_ass_and_real_burn_in(tmp_path):
     content = ass.read_text(encoding='utf-8-sig')
     assert '안녕하세요' in content and 'Dialogue:' in content
     assert 'PlayResX: 640' in content and 'PlayResY: 360' in content
-    result = ui.burn_subtitles(video, ass, messages.append)
+    result = ui.burn_subtitles(video, ass, messages.append,
+                              chat_json=chat if color_chat else None, resolution=(640, 360))
     assert result and result.exists(), '\n'.join(messages)
     assert result.stat().st_size > 0
+    if shutil.which('ffprobe'):
+        probe = subprocess.run([shutil.which('ffprobe'), '-v', 'error', '-show_entries',
+                                'format=duration', '-of', 'json', str(result)],
+                               capture_output=True, text=True, check=True)
+        assert float(json.loads(probe.stdout)['format']['duration']) == pytest.approx(1, abs=0.1)

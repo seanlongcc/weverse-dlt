@@ -548,13 +548,54 @@ def burn_subtitles(
     logger: Callable[[str], None],
     on_process: Callable[[subprocess.Popen[str] | None], None] | None = None,
     cancel_requested: Callable[[], bool] | None = None,
+    *,
+    chat_json: Path | None = None,
+    resolution: tuple[int, int] | None = None,
+    output_path: Path | None = None,
 ) -> Path | None:
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         logger("ffmpeg was not found on PATH. Skipping burned-in video output.")
         return None
 
-    output_path = video_path.with_name(f"{video_path.stem}_chat_burned.mp4")
+    output_path = output_path or video_path.with_name(f"{video_path.stem}_chat_burned.mp4")
+    if output_path.resolve() == video_path.resolve():
+        raise ValueError("Burn-in output must be different from the source video.")
+    if chat_json is not None:
+        try:
+            width, height = resolution or resolve_video_dimensions(
+                video_path, None, None, logger, on_process, cancel_requested,
+            )
+            # The parent owns temporary frames so cancellation of either child
+            # process still removes them after run_command reaps that process.
+            with tempfile.TemporaryDirectory(prefix="weverse-chat-", dir=output_path.parent) as tmp:
+                frames_dir = Path(tmp)
+                command = [sys.executable, str(SCRIPTS_DIR / "weverse_chat_render.py"),
+                           "--chat", str(chat_json), "--output-dir", str(frames_dir),
+                           "--resx", str(width), "--resy", str(height)]
+                font_dir = detect_nanum_font_dir()
+                if font_dir is not None:
+                    command.extend(["--font-dir", str(font_dir)])
+                logger("Rendering colored viewer names and native color emoji...")
+                run_command(command, logger, cwd=REPO_ROOT, on_process=on_process,
+                            cancel_requested=cancel_requested)
+                logger("Burning the color chat overlay into the final video...")
+                run_command(
+                    [ffmpeg, "-y", "-i", str(video_path), "-f", "concat", "-safe", "0",
+                     "-i", str(frames_dir / "chat.ffconcat"),
+                     "-filter_complex", "[0:v:0][1:v:0]overlay=x=0:y=main_h-overlay_h:format=auto:eof_action=pass[video]",
+                     "-map", "[video]", "-map", "0:a?", "-c:v", "libx264", "-crf", "18",
+                     "-preset", "medium", "-pix_fmt", "yuv420p", "-c:a", "copy",
+                     "-movflags", "+faststart", str(output_path)],
+                    logger, cwd=REPO_ROOT, on_process=on_process, cancel_requested=cancel_requested,
+                )
+        except WorkflowCancelled:
+            raise
+        except (RuntimeError, OSError) as exc:
+            logger(f"Color chat burn-in failed: {exc}")
+            return None
+        return output_path
+
     subtitle_filter = f"subtitles='{ffmpeg_filter_path(ass_path)}'"
 
     font_dir = detect_nanum_font_dir()
@@ -700,6 +741,8 @@ def run_workflow(
             logger,
             on_process=on_process,
             cancel_requested=cancel_requested,
+            chat_json=chat_json,
+            resolution=(width, height),
         )
         if burned_path is None:
             warnings.append(
