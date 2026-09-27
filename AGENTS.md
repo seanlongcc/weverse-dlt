@@ -16,7 +16,7 @@ This is a Python 3.11 desktop and command-line project for downloading Weverse v
 
 - `weverse_chat_ui.py`: PySide6 UI and workflow orchestration, subprocess handling, progress, cancellation, and output artifacts.
 - `styles/weverse_chat_ui.qss`: desktop UI styling.
-- `scripts/weverse_chat_dump.py`: Selenium Wire replay-chat collection and JSON output.
+- `scripts/weverse_chat_dump.py`: paginated replay-chat API collection through yt-dlp and JSON output.
 - `scripts/weverse_chat_to_ass_twitch.py`: chat JSON conversion into Twitch-style ASS subtitles.
 - `scripts/weverse_scrape.py`: group live-catalog scraping into a links file.
 - `scripts/weverse_dlt.py`: older batch download and WhisperX translation workflow.
@@ -38,7 +38,7 @@ python weverse_chat_ui.py
 
 On Windows, the UI can also be launched directly with `.\.venv\Scripts\python.exe .\weverse_chat_ui.py`.
 
-Chrome is required for scraping and chat collection. `ffmpeg` enables video burn-in, `ffprobe` supplies video dimensions when available, and Nanum Gothic is the intended overlay font. WhisperX runs in the separate `whisperx_env` conda environment used by the older translation workflow.
+Chrome is required for catalog scraping and the sign-in helper. Replay-chat collection uses yt-dlp's Weverse API support. `ffmpeg` enables video burn-in, `ffprobe` supplies video dimensions when available, and Nanum Gothic is the intended overlay font. WhisperX runs in the separate `whisperx_env` conda environment used by the older translation workflow.
 
 Tests require pytest, which is not included in `requirements.txt`. If needed, install it into the development environment with `python -m pip install pytest`, then run the relevant test file or the small suite:
 

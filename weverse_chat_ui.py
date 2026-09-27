@@ -695,7 +695,7 @@ def run_workflow(
         set_status("Dumping replay chat")
         set_progress(45)
         chat_json = output_dir / "weverse_chat.json"
-        logger("Launching Chrome to collect replay chat...")
+        logger("Collecting the complete replay chat history...")
         run_command(
             [
                 sys.executable,
@@ -706,7 +706,6 @@ def run_workflow(
                 url,
                 "--out",
                 str(chat_json),
-                "--no-headless",
             ],
             logger,
             cwd=REPO_ROOT,

@@ -73,7 +73,7 @@ Note: This workflow is outdated.
 
 2. **Install Chrome, ffmpeg, and Nanum Gothic**:
 
-    - Chrome is required for replay-chat collection and the sign-in helper.
+    - Chrome is required for the sign-in helper and catalog scraping. Replay-chat collection uses Weverse's paginated API through yt-dlp.
     - Add `ffmpeg` to `PATH` for the final video with chat burned in. Without it, the source video, JSON, and ASS files are still produced.
     - `ffprobe`, normally included with ffmpeg, supplies video dimensions.
     - Install [Nanum Gothic](https://fonts.google.com/specimen/Nanum+Gothic) for the intended overlay font.
@@ -90,7 +90,7 @@ Note: This workflow is outdated.
 4. **Connect your Weverse session** using either option:
 
     - **Import browser session** reads your existing Weverse login from Zen, Chrome, Edge, Firefox, or Brave. Zen is selected by default; the app remembers your browser choice. Log into Weverse in that browser first. Under **Manual cookie & profile**, optionally select a profile name or a full profile path. Leave it blank for automatic profile selection.
-    - **Zen profiles** are detected in the standard Windows, macOS, Linux, and Linux Flatpak locations. Import uses yt-dlp's Firefox cookie reader with the resolved Zen profile. The installation's default profile takes priority, followed by the profile marked as default, then the most recently updated cookie database. For another profile or a portable installation, paste its Profile Directory from [Zen's `about:support` page](https://docs.zen-browser.app/user-manual/window-sync) into **Browser profile**. Zen provides the session cookies; replay-chat collection and the optional sign-in helper still use Chrome.
+    - **Zen profiles** are detected in the standard Windows, macOS, Linux, and Linux Flatpak locations. Import uses yt-dlp's Firefox cookie reader with the resolved Zen profile. The installation's default profile takes priority, followed by the profile marked as default, then the most recently updated cookie database. For another profile or a portable installation, paste its Profile Directory from [Zen's `about:support` page](https://docs.zen-browser.app/user-manual/window-sync) into **Browser profile**. Zen provides the session cookies; only the optional sign-in helper uses Chrome in this workflow.
     - **Sign in with Chrome** opens a separate, temporary Chrome window. Sign into Weverse there, completing any login prompts yourself. The app detects the Weverse access-token cookie automatically and closes this window. You have five minutes to finish signing in.
 
     Direct import can fail when browser cookies are locked or cannot be decrypted, especially with Windows Chromium encryption. Close the selected browser and retry, or use **Sign in with Chrome**. If the sign-in page rejects browser automation, the manual option remains available. See [yt-dlp's cookie FAQ](https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp) and [Windows decryption issue](https://github.com/yt-dlp/yt-dlp/issues/10927).
@@ -105,6 +105,7 @@ Note: This workflow is outdated.
     - **Import .txt** accepts a UTF-8 links file, including files created by `weverse_scrape.py`.
     - Duplicate replay links are skipped, including copies with different share query parameters. Invalid input is rejected as a whole so it can be corrected before adding.
     - Click **Start queue**. Replays run sequentially. Each gets its own folder under `output/`, containing `title.txt`, the source video, `weverse_chat.json`, `weverse_twitch_chat.ass`, and `*_chat_burned.mp4` when rendering succeeds.
+    - Chat collection follows every API pagination cursor to the end of history. Failed requests, malformed responses, or repeated cursors stop the run before a partial chat dump is exported or burned into the video. Keep yt-dlp updated if Weverse changes its API.
     - Burned chat has stable colors for viewer names, white message text, and native color emoji. Text is measured before wrapping, keeping joined emoji and skin tones together. The MP4 uses transparent snapshots rendered from the chat JSON; temporary snapshots are removed after rendering, errors, or cancellation. The separate ASS overlay keeps colored names, but emoji rendering in ASS depends on the subtitle player and may remain monochrome.
     - Inspect each row's status, select it to see output stages, and click **Open selected folder** or the row's **Open folder** cell. Partial files remain accessible after errors or cancellation.
     - A failed replay does not block later links. **Stop** cancels active work; links that have not started stay queued. **Start queue** runs those remaining links. **Retry unfinished** also queues failed, stopped, and warning items for a fresh run in a new folder; it does not resume a partial download in place.
